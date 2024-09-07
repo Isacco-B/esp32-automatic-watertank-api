@@ -8,7 +8,7 @@ WIFI_RETRY_INTERVAL = 1
 
 led_wifi = Pin(32, Pin.OUT)
 
-   
+
 def connect_to_wifi():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -23,7 +23,7 @@ def connect_to_wifi():
     led_wifi.off()
     print('Connected to:', WLAN_SSID)
     print('Connection details:', wlan.ifconfig())
-    
+
 def is_wifi_connected():
     wlan = network.WLAN(network.STA_IF)
     return wlan.isconnected()

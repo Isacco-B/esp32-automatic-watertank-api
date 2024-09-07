@@ -1,4 +1,5 @@
 from lib.umqtt import MQTTClient
+from lib.acs712 import ACS712
 from utils.utils import connect_to_wifi, is_wifi_connected
 from machine import Pin
 import time
@@ -19,8 +20,8 @@ TOPICS = {
 
 ac_current_sernsor = Pin(4, Pin.IN)
 
-siren_relay_status = Pin(16, Pin.IN)
-pump_relay_status = Pin(17, Pin.IN)
+pump_relay_status = Pin(16, Pin.IN)
+siren_relay_status = Pin(17, Pin.IN)
 
 pump_aux_relay = Pin(18, Pin.OUT)
 siren_aux_relay = Pin(19, Pin.OUT)
@@ -31,9 +32,12 @@ status_requested = False
 status_end_time = 0
 last_execution_time = {}
 
+acs = ACS712()
+acs.calibrate()
+
 
 def send_notification(topic, message):
-    try:  
+    try:
         mqtt_client.publish(topic, message)
     except Exception as e:
         print(f"Error sending notification: {topic}")
@@ -48,7 +52,7 @@ def can_execute(command):
 def handle_message(topic, msg):
     global current_message, status_end_time, status_requested
     print(topic, msg)
-    
+
     if topic == TOPICS["SIREN"] and can_execute("small_gate"):
         if siren_aux_relay.value():
             siren_aux_relay.off()
@@ -56,19 +60,19 @@ def handle_message(topic, msg):
         else:
             siren_aux_relay.on()
             response = {"data": "Attiva Sirena"}
-            
+
         send_notification(b"api/notification/siren", json.dumps(response))
 
-    elif topic == TOPICS["PUMP"] and can_execute("garage_light"):    
+    elif topic == TOPICS["PUMP"] and can_execute("garage_light"):
         if pump_aux_relay.value():
             pump_aux_relay.off()
             response = {"data": "Disattiva Pompa"}
         else:
             pump_aux_relay.on()
             response = {"data": "Attiva Pompa"}
-            
+
         send_notification(b"api/notification/pump", json.dumps(response))
-        
+
     elif topic == TOPICS["GET_WATER_TANK_STATUS"]:
         status_requested = True
         status_end_time = time.time() + 60
@@ -80,7 +84,7 @@ def send_water_tank_status():
         "pump_relay_status": status_variant.get(str(pump_relay_status.value()), "sconosciuto"),
         "pump_aux_relay": status_variant.get(str(pump_aux_relay.value()), "sconosciuto"),
         "siren_aux_relay": status_variant.get(str(siren_aux_relay.value()), "sconosciuto"),
-        "current": "ac_current_sernsor"
+        "current": str(acs.getCurrentAC())
     }
     response = json.dumps(water_tank_status)
     send_notification(b"api/notification/water_tank/status", response)
@@ -93,7 +97,7 @@ def connect_to_mqtt():
 
     client = MQTTClient(client_id=CLIENT_ID, user=USER, password=PASSWORD, server=SERVER)
     client.set_callback(handle_message)
-    client.connect() 
+    client.connect()
     for topic in TOPICS.values():
         client.subscribe(topic)
     print(f"Connected to {SERVER}")
@@ -125,7 +129,7 @@ def main():
 
                     if current_time >= status_end_time:
                         status_requested = False
-                        
+
                 if current_time - last_keep_alive >= 10:
                     keep_connection_active()
                     last_keep_alive = current_time
