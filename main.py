@@ -20,8 +20,8 @@ TOPICS = {
 
 ac_current_sernsor = Pin(4, Pin.IN)
 
-pump_relay_status = Pin(16, Pin.IN)
-siren_relay_status = Pin(17, Pin.IN)
+pump_status = Pin(16, Pin.IN)
+alarm_status = Pin(17, Pin.IN)
 
 pump_aux_relay = Pin(18, Pin.OUT)
 siren_aux_relay = Pin(19, Pin.OUT)
@@ -56,20 +56,20 @@ def handle_message(topic, msg):
     if topic == TOPICS["SIREN"] and can_execute("small_gate"):
         if siren_aux_relay.value():
             siren_aux_relay.off()
-            response = {"data": "Disattiva Sirena"}
+            response = {"data": "Sirena disabilitata: Eseguito con successo"}
         else:
             siren_aux_relay.on()
-            response = {"data": "Attiva Sirena"}
+            response = {"data": "Sirena abilitata: Eseguito con successo"}
 
         send_notification(b"api/notification/siren", json.dumps(response))
 
     elif topic == TOPICS["PUMP"] and can_execute("garage_light"):
         if pump_aux_relay.value():
             pump_aux_relay.off()
-            response = {"data": "Disattiva Pompa"}
+            response = {"data": "Pompa disattivata: Eseguito con successo"}
         else:
             pump_aux_relay.on()
-            response = {"data": "Attiva Pompa"}
+            response = {"data": "Pompa attivata: Eseguito con successo"}
 
         send_notification(b"api/notification/pump", json.dumps(response))
 
@@ -80,10 +80,10 @@ def handle_message(topic, msg):
 def send_water_tank_status():
     status_variant = {"0":"disattivo", "1":"attivo"}
     water_tank_status = {
-        "siren_relay_status": status_variant.get(str(siren_relay_status.value()), "sconosciuto"),
-        "pump_relay_status": status_variant.get(str(pump_relay_status.value()), "sconosciuto"),
-        "pump_aux_relay": status_variant.get(str(pump_aux_relay.value()), "sconosciuto"),
-        "siren_aux_relay": status_variant.get(str(siren_aux_relay.value()), "sconosciuto"),
+        "alarmStatus": status_variant.get(str(alarm_status.value()), "sconosciuto"),
+        "pumpStatus": status_variant.get(str(pump_status.value()), "sconosciuto"),
+        "pumpRelay": status_variant.get(str(pump_aux_relay.value()), "sconosciuto"),
+        "sirenRelay": status_variant.get(str(siren_aux_relay.value()), "sconosciuto"),
         "current": str(acs.getCurrentAC())
     }
     response = json.dumps(water_tank_status)
