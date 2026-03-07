@@ -1,10 +1,12 @@
-# Wifi Config
 WLAN_SSID = ""
 WLAN_PASSWORD = ""
 
-# MQTT Server Config
 SERVER = ""
-CLIENT_ID = ""
 PORT = ""
-USER=""
-PASSWORD=""
+USER = ""
+PASSWORD = ""
+
+EMAIL_HOST = ""
+EMAIL_PORT = 465
+EMAIL_ADDRESS = ""
+EMAIL_PASSWORD = ""
