@@ -51,6 +51,8 @@ status_requested = False
 status_end_time = 0
 last_execution_time = {}
 last_alarm_state = alarm_status.value()
+last_alarm_email_time = 0
+ALARM_EMAIL_INTERVAL = 300  # 5 minutes
 
 
 def cleanup_pins() -> None:
@@ -358,11 +360,13 @@ def check_alarm() -> None:
     """
     Poll alarm pin and detect state transitions.
     On 0→1: send MQTT notification + email to all recipients.
+    While active: resend email every ALARM_EMAIL_INTERVAL seconds.
     On 1→0: send MQTT notification (alarm cleared).
     """
-    global last_alarm_state
+    global last_alarm_state, last_alarm_email_time
     try:
         current_alarm = alarm_status.value()
+        current_time = time.time()
 
         if current_alarm == 1 and last_alarm_state == 0:
             print("ALARM TRIGGERED — water level too high!")
@@ -376,6 +380,16 @@ def check_alarm() -> None:
                 "ALLARME CISTERNA",
                 ALARM_MESSAGES["triggered"],
             )
+            last_alarm_email_time = current_time
+
+        elif current_alarm == 1 and last_alarm_state == 1:
+            if current_time - last_alarm_email_time >= ALARM_EMAIL_INTERVAL:
+                print("Alarm still active — resending email notification")
+                email_manager.send_alarm_email(
+                    "ALLARME CISTERNA",
+                    ALARM_MESSAGES["triggered"],
+                )
+                last_alarm_email_time = current_time
 
         elif current_alarm == 0 and last_alarm_state == 1:
             print("Alarm cleared.")
@@ -383,6 +397,7 @@ def check_alarm() -> None:
                 b"api/notification/water_tank/alarm",
                 ALARM_MESSAGES["cleared"],
             )
+            last_alarm_email_time = 0
 
         last_alarm_state = current_alarm
 
