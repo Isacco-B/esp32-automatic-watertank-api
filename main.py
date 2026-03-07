@@ -34,6 +34,7 @@ TOPICS = {
     "EMAIL_ADD": b"api/water_tank/email/add",
     "EMAIL_REMOVE": b"api/water_tank/email/remove",
     "EMAIL_LIST": b"api/water_tank/email/list",
+    "EMAIL_TEST": b"api/water_tank/email/test",
 }
 
 pump_status = machine.Pin(16, machine.Pin.IN)
@@ -156,6 +157,10 @@ def handle_message(topic: bytes, msg: bytes) -> None:
         handle_email_list()
         return
 
+    if topic == TOPICS["EMAIL_TEST"]:
+        handle_email_test(msg)
+        return
+
     _, username = parse_message_payload(msg)
 
     if topic == TOPICS["SIREN"] and can_execute("siren"):
@@ -251,6 +256,40 @@ def handle_email_list() -> None:
         )
     except Exception as e:
         print(f"Error listing email recipients: {e}")
+
+
+def handle_email_test(msg: bytes) -> None:
+    """Send a test email to the address in payload {"email": "..."}."""
+    try:
+        data = json.loads(msg.decode("utf-8"))
+        email = data.get("email", "")
+
+        if not email or "@" not in email:
+            send_notification(
+                b"api/notification/water_tank/email/test",
+                MESSAGES["email_test"]["invalid"].format(email=email),
+                False,
+            )
+            return
+
+        ok = email_manager.send_alarm_email(
+            "Test notifica cisterna",
+            f"Questa è un'email di test inviata dal sistema di controllo cisterna all'indirizzo {email}.",
+            recipients=[email],
+        )
+        if ok:
+            message = MESSAGES["email_test"]["success"].format(email=email)
+        else:
+            message = MESSAGES["email_test"]["error"].format(email=email)
+        send_notification(b"api/notification/water_tank/email/test", message, ok)
+
+    except Exception as e:
+        print(f"Error sending test email: {e}")
+        send_notification(
+            b"api/notification/water_tank/email/test",
+            MESSAGES["email_test"]["error"].format(email="?"),
+            False,
+        )
 
 
 def send_statistics() -> None:

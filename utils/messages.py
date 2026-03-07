@@ -14,6 +14,11 @@ MESSAGES = {
     "reset_statistics": {
         "success": "Contatori resettati da {user}",
     },
+    "email_test": {
+        "success": "Email di test inviata con successo a {email}",
+        "error": "Errore nell'invio dell'email di test a {email}",
+        "invalid": "Indirizzo email non valido: {email}",
+    },
 }
 
 ALARM_MESSAGES = {

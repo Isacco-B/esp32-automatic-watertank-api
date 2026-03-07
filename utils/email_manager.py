@@ -56,28 +56,29 @@ class EmailManager:
         """Return a copy of the recipients list."""
         return self.recipients.copy()
 
-    def send_alarm_email(self, subject: str, body: str) -> bool:
+    def send_alarm_email(self, subject: str, body: str, recipients: list = None) -> bool:
         """
-        Send an alarm email to all recipients in a single SMTP connection.
+        Send an email to recipients (defaults to the configured list).
         Returns True if the email was sent successfully.
         """
-        if not self.recipients:
+        targets = recipients if recipients is not None else self.recipients
+        if not targets:
             print("No email recipients configured, skipping email notification")
             return False
 
         try:
             smtp = SMTP(EMAIL_HOST, EMAIL_PORT, ssl=True)
             smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            smtp.to(self.recipients)
+            smtp.to(targets)
             smtp.write(f"From: {EMAIL_ADDRESS}\r\n")
-            smtp.write(f"To: {', '.join(self.recipients)}\r\n")
+            smtp.write(f"To: {', '.join(targets)}\r\n")
             smtp.write(f"Subject: {subject}\r\n\r\n")
             smtp.write(body)
             code, msg = smtp.send()
             smtp.quit()
 
             if code == 250:
-                print(f"Alarm email sent to {len(self.recipients)} recipient(s)")
+                print(f"Alarm email sent to {len(targets)} recipient(s)")
                 return True
             else:
                 print(f"Email send failed: {code} {msg}")
