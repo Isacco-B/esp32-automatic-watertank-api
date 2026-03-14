@@ -42,6 +42,18 @@ TOPICS = {
     "EMAIL_TEST": b"api/water_tank/email/test",
 }
 
+NOTIFY = {
+    "SIREN": b"api/notification/water_tank/siren",
+    "PUMP": b"api/notification/water_tank/pump",
+    "ALARM": b"api/notification/water_tank/alarm",
+    "STATUS": b"api/notification/water_tank/status",
+    "EMAIL": b"api/notification/water_tank/email",
+    "EMAIL_LIST": b"api/notification/water_tank/email/list",
+    "EMAIL_TEST": b"api/notification/water_tank/email/test",
+    "STATISTICS": b"api/notification/water_tank/statistics",
+    "STATISTICS_RESET": b"api/notification/water_tank/statistics/reset",
+}
+
 pump_status = machine.Pin(16, machine.Pin.IN)
 alarm_status = machine.Pin(17, machine.Pin.IN)
 
@@ -179,7 +191,7 @@ def handle_message(topic: bytes, msg: bytes) -> None:
         else:
             siren_aux_relay.on()
             message = MESSAGES["siren"]["on"].format(user=username)
-        send_notification(b"api/notification/water_tank/siren", message)
+        send_notification(NOTIFY["SIREN"], message)
         counter.increment("siren")
 
     elif topic == TOPICS["PUMP"] and can_execute("pump"):
@@ -195,7 +207,7 @@ def handle_message(topic: bytes, msg: bytes) -> None:
                 pump_dry_run_check = True
                 pump_start_time = time.time()
             message = MESSAGES["pump"]["on"].format(user=username)
-        send_notification(b"api/notification/water_tank/pump", message)
+        send_notification(NOTIFY["PUMP"], message)
         counter.increment("pump")
 
     elif topic == TOPICS["GET_STATUS"]:
@@ -211,7 +223,7 @@ def handle_email_add(msg: bytes) -> None:
 
         if not email or "@" not in email:
             send_notification(
-                b"api/notification/water_tank/email",
+                NOTIFY["EMAIL"],
                 "Indirizzo email non valido",
                 False,
             )
@@ -222,12 +234,12 @@ def handle_email_add(msg: bytes) -> None:
             message = f"Indirizzo {email} aggiunto ai destinatari"
         else:
             message = f"Indirizzo {email} già presente nella lista"
-        send_notification(b"api/notification/water_tank/email", message, added)
+        send_notification(NOTIFY["EMAIL"], message, added)
 
     except Exception as e:
         print(f"Error adding email: {e}")
         send_notification(
-            b"api/notification/water_tank/email",
+            NOTIFY["EMAIL"],
             "Errore nell'aggiunta dell'indirizzo email",
             False,
         )
@@ -244,12 +256,12 @@ def handle_email_remove(msg: bytes) -> None:
             message = f"Indirizzo {email} rimosso dai destinatari"
         else:
             message = f"Indirizzo {email} non trovato nella lista"
-        send_notification(b"api/notification/water_tank/email", message, removed)
+        send_notification(NOTIFY["EMAIL"], message, removed)
 
     except Exception as e:
         print(f"Error removing email: {e}")
         send_notification(
-            b"api/notification/water_tank/email",
+            NOTIFY["EMAIL"],
             "Errore nella rimozione dell'indirizzo email",
             False,
         )
@@ -264,9 +276,7 @@ def handle_email_list() -> None:
             "totale": len(recipients),
             "timestamp": now_unix_ms(),
         }
-        mqtt_client.publish(
-            b"api/notification/water_tank/email/list", json.dumps(payload)
-        )
+        mqtt_client.publish(NOTIFY["EMAIL_LIST"], json.dumps(payload))
     except Exception as e:
         print(f"Error listing email recipients: {e}")
 
@@ -279,7 +289,7 @@ def handle_email_test(msg: bytes) -> None:
 
         if not email or "@" not in email:
             send_notification(
-                b"api/notification/water_tank/email/test",
+                NOTIFY["EMAIL_TEST"],
                 MESSAGES["email_test"]["invalid"].format(email=email),
                 False,
             )
@@ -294,12 +304,12 @@ def handle_email_test(msg: bytes) -> None:
             message = MESSAGES["email_test"]["success"].format(email=email)
         else:
             message = MESSAGES["email_test"]["error"].format(email=email)
-        send_notification(b"api/notification/water_tank/email/test", message, ok)
+        send_notification(NOTIFY["EMAIL_TEST"], message, ok)
 
     except Exception as e:
         print(f"Error sending test email: {e}")
         send_notification(
-            b"api/notification/water_tank/email/test",
+            NOTIFY["EMAIL_TEST"],
             MESSAGES["email_test"]["error"].format(email="?"),
             False,
         )
@@ -314,9 +324,7 @@ def send_statistics() -> None:
             "totale_storico": stats["totale"],
             "timestamp": now_unix_ms(),
         }
-        mqtt_client.publish(
-            b"api/notification/water_tank/statistics", json.dumps(message)
-        )
+        mqtt_client.publish(NOTIFY["STATISTICS"], json.dumps(message))
         print("Statistics sent successfully")
     except Exception as e:
         print(f"Error sending statistics: {e}")
@@ -334,7 +342,7 @@ def handle_reset_statistics(msg: bytes) -> None:
         counter.reset_counters(reset_type)
 
         message = MESSAGES["reset_statistics"]["success"].format(user=username)
-        send_notification(b"api/notification/water_tank/statistics/reset", message)
+        send_notification(NOTIFY["STATISTICS_RESET"], message)
         print(f"Statistics reset: {reset_type}")
 
     except Exception as e:
@@ -360,9 +368,7 @@ def send_water_tank_status() -> None:
             "current": str(acs.getCurrentAC()),
             "timestamp": now_unix_ms(),
         }
-        mqtt_client.publish(
-            b"api/notification/water_tank/status", json.dumps(status)
-        )
+        mqtt_client.publish(NOTIFY["STATUS"], json.dumps(status))
     except Exception as e:
         print(f"Error sending water tank status: {e}")
 
@@ -383,7 +389,7 @@ def check_alarm() -> None:
             print("ALARM TRIGGERED — water level too high!")
             counter.increment("alarm")
             send_notification(
-                b"api/notification/water_tank/alarm",
+                NOTIFY["ALARM"],
                 ALARM_MESSAGES["triggered"],
                 False,
             )
@@ -405,7 +411,7 @@ def check_alarm() -> None:
         elif current_alarm == 0 and last_alarm_state == 1:
             print("Alarm cleared.")
             send_notification(
-                b"api/notification/water_tank/alarm",
+                NOTIFY["ALARM"],
                 ALARM_MESSAGES["cleared"],
             )
             last_alarm_email_time = 0
@@ -436,7 +442,7 @@ def check_pump_dry_run() -> None:
         pump_dry_run_check = False
         message = MESSAGES["pump"]["dry_run"]
         print(f"Pump stopped: dry run detected (current={current:.2f}A)")
-        send_notification(b"api/notification/water_tank/pump", message, False)
+        send_notification(NOTIFY["PUMP"], message, False)
 
 
 def connect_to_mqtt() -> bool:
