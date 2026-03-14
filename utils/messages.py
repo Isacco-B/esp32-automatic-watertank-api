@@ -10,6 +10,7 @@ MESSAGES = {
         "on": "{user} ha attivato la pompa",
         "off": "{user} ha disattivato la pompa",
         "error": "Errore nell'azionamento della pompa richiesta da {user}",
+        "dry_run": "Pompa disattivata automaticamente: livello acqua insufficiente.",
     },
     "reset_statistics": {
         "success": "Contatori resettati da {user}",

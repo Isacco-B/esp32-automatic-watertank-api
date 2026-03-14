@@ -22,8 +22,13 @@ NOTIFICATION_TIMEOUT = 60
 STATUS_SEND_INTERVAL = 1000
 KEEP_ALIVE_INTERVAL = 10
 ALARM_CHECK_INTERVAL = 500
+ALARM_EMAIL_INTERVAL = 300
 
 VALID_COMMANDS = {"siren", "pump"}
+
+PUMP_DRY_RUN_CURRENT = 2.8
+PUMP_STARTUP_DELAY = 3
+PUMP_DRY_RUN_CHECK_INTERVAL = 1000
 
 TOPICS = {
     "SIREN": b"api/water_tank/siren",
@@ -52,7 +57,8 @@ status_end_time = 0
 last_execution_time = {}
 last_alarm_state = alarm_status.value()
 last_alarm_email_time = 0
-ALARM_EMAIL_INTERVAL = 300  # 5 minutes
+pump_dry_run_check = False
+pump_start_time = 0
 
 
 def cleanup_pins() -> None:
@@ -177,12 +183,17 @@ def handle_message(topic: bytes, msg: bytes) -> None:
         counter.increment("siren")
 
     elif topic == TOPICS["PUMP"] and can_execute("pump"):
+        global pump_dry_run_check, pump_start_time
         is_on = pump_aux_relay.value()
         if is_on:
             pump_aux_relay.off()
+            pump_dry_run_check = False
             message = MESSAGES["pump"]["off"].format(user=username)
         else:
             pump_aux_relay.on()
+            if alarm_status.value() == 0:
+                pump_dry_run_check = True
+                pump_start_time = time.time()
             message = MESSAGES["pump"]["on"].format(user=username)
         send_notification(b"api/notification/water_tank/pump", message)
         counter.increment("pump")
@@ -405,6 +416,29 @@ def check_alarm() -> None:
         print(f"Error checking alarm: {e}")
 
 
+def check_pump_dry_run() -> None:
+    """Force-stop the pump if current drops below threshold (dry run protection)."""
+    global pump_dry_run_check
+    if not pump_dry_run_check:
+        return
+    if pump_aux_relay.value() == 0:
+        pump_dry_run_check = False
+        return
+    if alarm_status.value() == 1:
+        pump_dry_run_check = False
+        return
+    if time.time() - pump_start_time < PUMP_STARTUP_DELAY:
+        return
+
+    current = acs.getCurrentAC()
+    if current < PUMP_DRY_RUN_CURRENT:
+        pump_aux_relay.off()
+        pump_dry_run_check = False
+        message = MESSAGES["pump"]["dry_run"]
+        print(f"Pump stopped: dry run detected (current={current:.2f}A)")
+        send_notification(b"api/notification/water_tank/pump", message, False)
+
+
 def connect_to_mqtt() -> bool:
     """
     Connect to MQTT broker.
@@ -467,6 +501,7 @@ def main() -> None:
     last_send_status = time.ticks_ms()
     last_keep_alive = time.time()
     last_alarm_check = time.ticks_ms()
+    last_pump_check = time.ticks_ms()
 
     while True:
         try:
@@ -484,6 +519,10 @@ def main() -> None:
                 if time.ticks_diff(ms_current_time, last_alarm_check) >= ALARM_CHECK_INTERVAL:
                     check_alarm()
                     last_alarm_check = ms_current_time
+
+                if time.ticks_diff(ms_current_time, last_pump_check) >= PUMP_DRY_RUN_CHECK_INTERVAL:
+                    check_pump_dry_run()
+                    last_pump_check = ms_current_time
 
                 if status_requested:
                     if (
