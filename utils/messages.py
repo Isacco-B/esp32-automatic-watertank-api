@@ -2,8 +2,8 @@ DEFAULT_USER = "Sistema"
 
 MESSAGES = {
     "siren": {
-        "on": "{user} ha abilitato la sirena",
-        "off": "{user} ha disabilitato la sirena",
+        "on": "{user} ha forzato l'arresto della sirena",
+        "off": "{user} ha riabilitato la sirena",
         "error": "Errore nell'azionamento della sirena richiesta da {user}",
     },
     "pump": {
