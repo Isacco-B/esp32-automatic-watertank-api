@@ -38,7 +38,9 @@ class CommandCounter:
         t = time.localtime(now_unix())
         today = self._today_str()
 
-        past_reset_time = t[3] > RESET_HOUR or (t[3] == RESET_HOUR and t[4] >= RESET_MINUTE)
+        past_reset_time = t[3] > RESET_HOUR or (
+            t[3] == RESET_HOUR and t[4] >= RESET_MINUTE
+        )
 
         return past_reset_time and today != self.last_reset_date
 
@@ -79,7 +81,13 @@ class CommandCounter:
                 json.dump(self.total_counters, f)
 
             with open(COUNTER_24H_FILE, "w") as f:
-                json.dump({"counts": self.counters_24h, "last_reset_date": self.last_reset_date}, f)
+                json.dump(
+                    {
+                        "counts": self.counters_24h,
+                        "last_reset_date": self.last_reset_date,
+                    },
+                    f,
+                )
         except Exception as e:
             print(f"Error saving counters: {e}")
 

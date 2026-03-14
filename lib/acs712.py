@@ -1,7 +1,9 @@
-from machine import Pin, ADC
+import math
 import sys
 import time
-import math
+
+from machine import ADC, Pin
+
 
 class ACS712:
     def __init__(self):
@@ -39,19 +41,18 @@ class ACS712:
     def sensitivity(self, value):
         self._sensitivity = value
 
-
     def getCurrentAC(self, freq=50):
         period = 100 / freq
         t_start = int(time.ticks_ms() / 100)
         Isum = 0
         msr_cnt = 0
-        Inow = None;
+        Inow = None
 
-        while ((time.ticks_ms() / 100) - t_start < period):
+        while (time.ticks_ms() / 100) - t_start < period:
             Inow = self._adc.read() - self.zeroPoint
             Isum += Inow * Inow
             msr_cnt += 1
-        pass  
+        pass
 
         Irms = math.sqrt(Isum / msr_cnt) / self.ADC_SCALE * self.VREF / self.sensitivity
         if Irms < 0.5:

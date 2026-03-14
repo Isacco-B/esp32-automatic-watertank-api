@@ -1,7 +1,7 @@
 import json
+from secrets import EMAIL_ADDRESS, EMAIL_HOST, EMAIL_PASSWORD, EMAIL_PORT
 
 from lib.umail import SMTP
-from secrets import EMAIL_ADDRESS, EMAIL_HOST, EMAIL_PASSWORD, EMAIL_PORT
 
 RECIPIENTS_FILE = "/email_recipients.json"
 
@@ -56,7 +56,9 @@ class EmailManager:
         """Return a copy of the recipients list."""
         return self.recipients.copy()
 
-    def send_alarm_email(self, subject: str, body: str, recipients: list = None) -> bool:
+    def send_alarm_email(
+        self, subject: str, body: str, recipients: list = None
+    ) -> bool:
         """
         Send an email to recipients (defaults to the configured list).
         Returns True if the email was sent successfully.
