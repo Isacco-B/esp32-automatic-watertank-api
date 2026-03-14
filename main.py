@@ -30,6 +30,7 @@ PUMP_DRY_RUN_CURRENT = 2.8
 PUMP_STARTUP_DELAY = 3
 PUMP_DRY_RUN_CHECK_INTERVAL = 1000
 SIREN_MAX_ON_TIME = 3600
+REBOOT_INTERVAL = 24 * 3600
 
 TOPICS = {
     "SIREN": b"api/water_tank/siren",
@@ -54,6 +55,8 @@ NOTIFY = {
     "STATISTICS": b"api/notification/water_tank/statistics",
     "STATISTICS_RESET": b"api/notification/water_tank/statistics/reset",
 }
+
+EMAIL_SEND_TOPIC = b"api/email/send"
 
 pump_status = machine.Pin(16, machine.Pin.IN)
 alarm_status = machine.Pin(17, machine.Pin.IN)
@@ -131,6 +134,28 @@ def send_notification(topic, message: str, success: bool = True) -> None:
         mqtt_client.publish(topic, json.dumps(payload).encode("utf-8"))
     except Exception as e:
         print(f"Error sending notification: {topic}, error: {e}")
+
+
+def publish_email_request(
+    subject: str,
+    body: str,
+    recipients: list,
+    notify_topic: bytes = None,
+    notify_ok: str = None,
+    notify_err: str = None,
+) -> None:
+    """
+    Publish an email send request to the mqtt-email server.
+    """
+    try:
+        payload = {"subject": subject, "body": body, "recipients": recipients}
+        if notify_topic:
+            payload["notify_topic"] = notify_topic.decode()
+            payload["notify_ok"] = notify_ok
+            payload["notify_err"] = notify_err
+        mqtt_client.publish(EMAIL_SEND_TOPIC, json.dumps(payload).encode("utf-8"))
+    except Exception as e:
+        print(f"Error publishing email request: {e}")
 
 
 def can_execute(command: str) -> bool:
@@ -289,7 +314,7 @@ def handle_email_list() -> None:
 
 
 def handle_email_test(msg: bytes) -> None:
-    """Send a test email to the address in payload {"email": "..."}."""
+    """Forward a test email request to the server via MQTT."""
     try:
         data = json.loads(msg.decode("utf-8"))
         email = data.get("email", "")
@@ -302,19 +327,17 @@ def handle_email_test(msg: bytes) -> None:
             )
             return
 
-        ok = email_manager.send_alarm_email(
-            "Test notifica cisterna",
-            f"Questa è un'email di test inviata dal sistema di controllo cisterna all'indirizzo {email}.",
+        publish_email_request(
+            subject="Test notifica cisterna",
+            body=f"Questa è un'email di test inviata dal sistema di controllo cisterna all'indirizzo {email}.",
             recipients=[email],
+            notify_topic=NOTIFY["EMAIL_TEST"],
+            notify_ok=MESSAGES["email_test"]["success"].format(email=email),
+            notify_err=MESSAGES["email_test"]["error"].format(email=email),
         )
-        if ok:
-            message = MESSAGES["email_test"]["success"].format(email=email)
-        else:
-            message = MESSAGES["email_test"]["error"].format(email=email)
-        send_notification(NOTIFY["EMAIL_TEST"], message, ok)
 
     except Exception as e:
-        print(f"Error sending test email: {e}")
+        print(f"Error forwarding test email: {e}")
         send_notification(
             NOTIFY["EMAIL_TEST"],
             MESSAGES["email_test"]["error"].format(email="?"),
@@ -386,8 +409,8 @@ def send_water_tank_status() -> None:
 def check_alarm() -> None:
     """
     Poll alarm pin and detect state transitions.
-    On 0→1: send MQTT notification + email to all recipients.
-    While active: resend email every ALARM_EMAIL_INTERVAL seconds.
+    On 0→1: send MQTT notification + forward email request to server.
+    While active: resend email request every ALARM_EMAIL_INTERVAL seconds.
     On 1→0: send MQTT notification (alarm cleared).
     """
     global last_alarm_state, last_alarm_email_time
@@ -403,19 +426,25 @@ def check_alarm() -> None:
                 ALARM_MESSAGES["triggered"],
                 False,
             )
-            email_manager.send_alarm_email(
-                "ALLARME CISTERNA",
-                ALARM_MESSAGES["triggered"],
-            )
+            recipients = email_manager.get_recipients()
+            if recipients:
+                publish_email_request(
+                    subject="ALLARME CISTERNA",
+                    body=ALARM_MESSAGES["triggered"],
+                    recipients=recipients,
+                )
             last_alarm_email_time = current_time
 
         elif current_alarm == 1 and last_alarm_state == 1:
             if current_time - last_alarm_email_time >= ALARM_EMAIL_INTERVAL:
                 print("Alarm still active — resending email notification")
-                email_manager.send_alarm_email(
-                    "ALLARME CISTERNA",
-                    ALARM_MESSAGES["triggered"],
-                )
+                recipients = email_manager.get_recipients()
+                if recipients:
+                    publish_email_request(
+                        subject="ALLARME CISTERNA",
+                        body=ALARM_MESSAGES["triggered"],
+                        recipients=recipients,
+                    )
                 last_alarm_email_time = current_time
 
         elif current_alarm == 0 and last_alarm_state == 1:
@@ -541,6 +570,7 @@ def main() -> None:
 
     cleanup_pins()
 
+    boot_time = time.time()
     last_send_status = time.ticks_ms()
     last_keep_alive = time.time()
     last_alarm_check = time.ticks_ms()
@@ -590,6 +620,12 @@ def main() -> None:
                 if current_time - last_keep_alive >= KEEP_ALIVE_INTERVAL:
                     keep_connection_active()
                     last_keep_alive = current_time
+
+                if current_time - boot_time >= REBOOT_INTERVAL:
+                    if alarm_status.value() == 0 and pump_aux_relay.value() == 0:
+                        print("Scheduled daily reboot")
+                        cleanup_pins()
+                        machine.reset()
 
                 time.sleep(SLEEP_INTERVAL)
 

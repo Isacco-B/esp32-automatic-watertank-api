@@ -1,14 +1,12 @@
 import json
-from secrets import EMAIL_ADDRESS, EMAIL_HOST, EMAIL_PASSWORD, EMAIL_PORT
-
-from lib.umail import SMTP
 
 RECIPIENTS_FILE = "/email_recipients.json"
 
 
 class EmailManager:
     """
-    Manages email recipients and sends alarm notifications.
+    Manages email recipients list (persistent storage).
+    Email sending is delegated to the mqtt-email-relay server.
     """
 
     def __init__(self):
@@ -16,7 +14,6 @@ class EmailManager:
         self.load_recipients()
 
     def load_recipients(self) -> None:
-        """Load recipients from persistent storage."""
         try:
             with open(RECIPIENTS_FILE, "r") as f:
                 data = json.load(f)
@@ -27,7 +24,6 @@ class EmailManager:
             print("No existing recipients, starting fresh")
 
     def save_recipients(self) -> None:
-        """Save recipients to persistent storage."""
         try:
             with open(RECIPIENTS_FILE, "w") as f:
                 json.dump(self.recipients, f)
@@ -35,7 +31,6 @@ class EmailManager:
             print(f"Error saving recipients: {e}")
 
     def add_recipient(self, email: str) -> bool:
-        """Add an email recipient. Returns False if already present."""
         if email in self.recipients:
             return False
         self.recipients.append(email)
@@ -44,7 +39,6 @@ class EmailManager:
         return True
 
     def remove_recipient(self, email: str) -> bool:
-        """Remove an email recipient. Returns False if not found."""
         if email not in self.recipients:
             return False
         self.recipients.remove(email)
@@ -53,42 +47,7 @@ class EmailManager:
         return True
 
     def get_recipients(self) -> list:
-        """Return a copy of the recipients list."""
         return self.recipients.copy()
-
-    def send_alarm_email(
-        self, subject: str, body: str, recipients: list = None
-    ) -> bool:
-        """
-        Send an email to recipients (defaults to the configured list).
-        Returns True if the email was sent successfully.
-        """
-        targets = recipients if recipients is not None else self.recipients
-        if not targets:
-            print("No email recipients configured, skipping email notification")
-            return False
-
-        try:
-            smtp = SMTP(EMAIL_HOST, EMAIL_PORT, ssl=True)
-            smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            smtp.to(targets)
-            smtp.write(f"From: {EMAIL_ADDRESS}\r\n")
-            smtp.write(f"To: {', '.join(targets)}\r\n")
-            smtp.write(f"Subject: {subject}\r\n\r\n")
-            smtp.write(body)
-            code, msg = smtp.send()
-            smtp.quit()
-
-            if code == 250:
-                print(f"Alarm email sent to {len(targets)} recipient(s)")
-                return True
-            else:
-                print(f"Email send failed: {code} {msg}")
-                return False
-
-        except Exception as e:
-            print(f"Error sending alarm email: {e}")
-            return False
 
 
 email_manager = EmailManager()
