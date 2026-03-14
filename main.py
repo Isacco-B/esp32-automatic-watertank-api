@@ -29,6 +29,7 @@ VALID_COMMANDS = {"siren", "pump"}
 PUMP_DRY_RUN_CURRENT = 2.8
 PUMP_STARTUP_DELAY = 3
 PUMP_DRY_RUN_CHECK_INTERVAL = 1000
+SIREN_MAX_ON_TIME = 3600
 
 TOPICS = {
     "SIREN": b"api/water_tank/siren",
@@ -72,6 +73,8 @@ last_alarm_email_time = 0
 last_pump_state = pump_status.value()
 pump_dry_run_check = False
 pump_start_time = 0
+siren_auto_off_check = False
+siren_start_time = 0
 
 
 def cleanup_pins() -> None:
@@ -125,7 +128,7 @@ def send_notification(topic, message: str, success: bool = True) -> None:
             "timestamp": now_unix_ms(),
         }
 
-        mqtt_client.publish(topic, json.dumps(payload))
+        mqtt_client.publish(topic, json.dumps(payload).encode("utf-8"))
     except Exception as e:
         print(f"Error sending notification: {topic}, error: {e}")
 
@@ -185,12 +188,16 @@ def handle_message(topic: bytes, msg: bytes) -> None:
     _, username = parse_message_payload(msg)
 
     if topic == TOPICS["SIREN"] and can_execute("siren"):
+        global siren_auto_off_check, siren_start_time
         is_on = siren_aux_relay.value()
         if is_on:
             siren_aux_relay.off()
+            siren_auto_off_check = False
             message = MESSAGES["siren"]["off"].format(user=username)
         else:
             siren_aux_relay.on()
+            siren_auto_off_check = True
+            siren_start_time = time.time()
             message = MESSAGES["siren"]["on"].format(user=username)
         send_notification(NOTIFY["SIREN"], message)
         counter.increment("siren")
@@ -276,7 +283,7 @@ def handle_email_list() -> None:
             "totale": len(recipients),
             "timestamp": now_unix_ms(),
         }
-        mqtt_client.publish(NOTIFY["EMAIL_LIST"], json.dumps(payload))
+        mqtt_client.publish(NOTIFY["EMAIL_LIST"], json.dumps(payload).encode("utf-8"))
     except Exception as e:
         print(f"Error listing email recipients: {e}")
 
@@ -324,7 +331,7 @@ def send_statistics() -> None:
             "totale_storico": stats["totale"],
             "timestamp": now_unix_ms(),
         }
-        mqtt_client.publish(NOTIFY["STATISTICS"], json.dumps(message))
+        mqtt_client.publish(NOTIFY["STATISTICS"], json.dumps(message).encode("utf-8"))
         print("Statistics sent successfully")
     except Exception as e:
         print(f"Error sending statistics: {e}")
@@ -371,7 +378,7 @@ def send_water_tank_status() -> None:
             "timestamp": now_unix_ms(),
         }
 
-        mqtt_client.publish(NOTIFY["STATUS"], json.dumps(status))
+        mqtt_client.publish(NOTIFY["STATUS"], json.dumps(status).encode("utf-8"))
     except Exception as e:
         print(f"Error sending water tank status: {e}")
 
@@ -459,6 +466,20 @@ def check_pump_dry_run() -> None:
         message = MESSAGES["pump"]["dry_run"]
         print(f"Pump stopped: dry run detected (current={current:.2f}A)")
         send_notification(NOTIFY["PUMP"], message, False)
+
+
+def check_siren_auto_off() -> None:
+    """Force-stop the siren if it has been on for longer than SIREN_MAX_ON_TIME."""
+    global siren_auto_off_check
+    if not siren_auto_off_check:
+        return
+    if siren_aux_relay.value() == 0:
+        siren_auto_off_check = False
+        return
+    if time.time() - siren_start_time >= SIREN_MAX_ON_TIME:
+        siren_aux_relay.off()
+        siren_auto_off_check = False
+        print("Siren auto-off: max on time reached")
 
 
 def connect_to_mqtt() -> bool:
@@ -551,6 +572,7 @@ def main() -> None:
                     >= PUMP_DRY_RUN_CHECK_INTERVAL
                 ):
                     check_pump_dry_run()
+                    check_siren_auto_off()
                     last_pump_check = ms_current_time
 
                 if status_requested:
