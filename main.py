@@ -69,6 +69,7 @@ status_end_time = 0
 last_execution_time = {}
 last_alarm_state = alarm_status.value()
 last_alarm_email_time = 0
+last_pump_state = pump_status.value()
 pump_dry_run_check = False
 pump_start_time = 0
 
@@ -208,7 +209,6 @@ def handle_message(topic: bytes, msg: bytes) -> None:
                 pump_start_time = time.time()
             message = MESSAGES["pump"]["on"].format(user=username)
         send_notification(NOTIFY["PUMP"], message)
-        counter.increment("pump")
 
     elif topic == TOPICS["GET_STATUS"]:
         status_requested = True
@@ -422,6 +422,19 @@ def check_alarm() -> None:
         print(f"Error checking alarm: {e}")
 
 
+def check_pump_state() -> None:
+    """Detect pump rising edge on physical pin and increment counter."""
+    global last_pump_state
+    try:
+        current_pump = pump_status.value()
+        if current_pump == 1 and last_pump_state == 0:
+            counter.increment("pump")
+            print("Pump activated — counter incremented")
+        last_pump_state = current_pump
+    except Exception as e:
+        print(f"Error checking pump state: {e}")
+
+
 def check_pump_dry_run() -> None:
     """Force-stop the pump if current drops below threshold (dry run protection)."""
     global pump_dry_run_check
@@ -524,6 +537,7 @@ def main() -> None:
 
                 if time.ticks_diff(ms_current_time, last_alarm_check) >= ALARM_CHECK_INTERVAL:
                     check_alarm()
+                    check_pump_state()
                     last_alarm_check = ms_current_time
 
                 if time.ticks_diff(ms_current_time, last_pump_check) >= PUMP_DRY_RUN_CHECK_INTERVAL:
