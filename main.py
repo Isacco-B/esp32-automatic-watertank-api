@@ -5,8 +5,8 @@ from secrets import PASSWORD, SERVER, USER
 
 import machine
 
-from lib.umqtt import MQTTClient
 from lib.acs712 import ACS712
+from lib.umqtt import MQTTClient
 from utils.counter import counter
 from utils.email_manager import email_manager
 from utils.messages import ALARM_MESSAGES, DEFAULT_USER, MESSAGES, STATUS_DESCRIPTIONS
@@ -353,21 +353,24 @@ def send_water_tank_status() -> None:
     """Read all sensors and publish current water tank status."""
     try:
         status = {
-            "alarmStatus": STATUS_DESCRIPTIONS.get(
-                str(alarm_status.value()), STATUS_DESCRIPTIONS["unknown"]
-            ),
-            "pumpStatus": STATUS_DESCRIPTIONS.get(
-                str(pump_status.value()), STATUS_DESCRIPTIONS["unknown"]
-            ),
-            "pumpRelay": STATUS_DESCRIPTIONS.get(
-                str(pump_aux_relay.value()), STATUS_DESCRIPTIONS["unknown"]
-            ),
-            "sirenRelay": STATUS_DESCRIPTIONS.get(
-                str(siren_aux_relay.value()), STATUS_DESCRIPTIONS["unknown"]
-            ),
-            "current": str(acs.getCurrentAC()),
+            "data": {
+                "alarmStatus": STATUS_DESCRIPTIONS.get(
+                    str(alarm_status.value()), STATUS_DESCRIPTIONS["unknown"]
+                ),
+                "pumpStatus": STATUS_DESCRIPTIONS.get(
+                    str(pump_status.value()), STATUS_DESCRIPTIONS["unknown"]
+                ),
+                "pumpRelay": STATUS_DESCRIPTIONS.get(
+                    str(pump_aux_relay.value()), STATUS_DESCRIPTIONS["unknown"]
+                ),
+                "sirenRelay": STATUS_DESCRIPTIONS.get(
+                    str(siren_aux_relay.value()), STATUS_DESCRIPTIONS["unknown"]
+                ),
+                "current": str(acs.getCurrentAC()),
+            },
             "timestamp": now_unix_ms(),
         }
+
         mqtt_client.publish(NOTIFY["STATUS"], json.dumps(status))
     except Exception as e:
         print(f"Error sending water tank status: {e}")
@@ -535,12 +538,18 @@ def main() -> None:
 
                 mqtt_client.check_msg()
 
-                if time.ticks_diff(ms_current_time, last_alarm_check) >= ALARM_CHECK_INTERVAL:
+                if (
+                    time.ticks_diff(ms_current_time, last_alarm_check)
+                    >= ALARM_CHECK_INTERVAL
+                ):
                     check_alarm()
                     check_pump_state()
                     last_alarm_check = ms_current_time
 
-                if time.ticks_diff(ms_current_time, last_pump_check) >= PUMP_DRY_RUN_CHECK_INTERVAL:
+                if (
+                    time.ticks_diff(ms_current_time, last_pump_check)
+                    >= PUMP_DRY_RUN_CHECK_INTERVAL
+                ):
                     check_pump_dry_run()
                     last_pump_check = ms_current_time
 
