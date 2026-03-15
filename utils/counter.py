@@ -25,7 +25,7 @@ class CommandCounter:
             "alarm": 0,
         }
 
-        self.last_reset_date = None  # "YYYY-MM-DD"
+        self.last_auto_reset_date = None  # "YYYY-MM-DD" — only set by automatic 23:59 reset
 
         self.load_counters()
 
@@ -34,23 +34,18 @@ class CommandCounter:
         return f"{t[0]:04d}-{t[1]:02d}-{t[2]:02d}"
 
     def _should_reset(self) -> bool:
-        """Return True if it's past 23:59 of a new day since last reset."""
+        """Return True if it's 23:59 and the automatic daily reset hasn't run yet today."""
         t = time.localtime(now_unix())
-        today = self._today_str()
-
-        past_reset_time = t[3] > RESET_HOUR or (
-            t[3] == RESET_HOUR and t[4] >= RESET_MINUTE
-        )
-
-        return past_reset_time and today != self.last_reset_date
+        at_reset_time = t[3] == RESET_HOUR and t[4] >= RESET_MINUTE
+        return at_reset_time and self._today_str() != self.last_auto_reset_date
 
     def _reset_24h_if_needed(self) -> None:
         if self._should_reset():
             for command in self.counters_24h:
                 self.counters_24h[command] = 0
-            self.last_reset_date = self._today_str()
+            self.last_auto_reset_date = self._today_str()
             self.save_counters()
-            print(f"Daily counters reset at {self.last_reset_date}")
+            print(f"Daily counters reset at {self.last_auto_reset_date}")
 
     def load_counters(self) -> None:
         """Load counters from persistent storage."""
@@ -68,7 +63,7 @@ class CommandCounter:
                 data = json.load(f)
                 if isinstance(data, dict):
                     self.counters_24h = data.get("counts", self.counters_24h)
-                    self.last_reset_date = data.get("last_reset_date", None)
+                    self.last_auto_reset_date = data.get("last_auto_reset_date", None)
         except (OSError, ValueError):
             print("No existing 24h counters")
 
@@ -84,7 +79,7 @@ class CommandCounter:
                 json.dump(
                     {
                         "counts": self.counters_24h,
-                        "last_reset_date": self.last_reset_date,
+                        "last_auto_reset_date": self.last_auto_reset_date,
                     },
                     f,
                 )
@@ -125,7 +120,6 @@ class CommandCounter:
         if counter_type in ["all", "24h"]:
             for command in self.counters_24h:
                 self.counters_24h[command] = 0
-            self.last_reset_date = self._today_str()
 
         if counter_type in ["all", "total"]:
             for command in self.total_counters:

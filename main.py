@@ -575,6 +575,7 @@ def main() -> None:
     last_keep_alive = time.time()
     last_alarm_check = time.ticks_ms()
     last_pump_check = time.ticks_ms()
+    last_daily_reset_check = time.time()
 
     while True:
         try:
@@ -620,6 +621,10 @@ def main() -> None:
                 if current_time - last_keep_alive >= KEEP_ALIVE_INTERVAL:
                     keep_connection_active()
                     last_keep_alive = current_time
+
+                if current_time - last_daily_reset_check >= 60:
+                    counter._reset_24h_if_needed()
+                    last_daily_reset_check = current_time
 
                 if current_time - boot_time >= REBOOT_INTERVAL:
                     if alarm_status.value() == 0 and pump_aux_relay.value() == 0:
